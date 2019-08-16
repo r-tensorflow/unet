@@ -5,3 +5,4 @@
 data-raw/*
 logs_r/*
 unet.R
+inst/doc

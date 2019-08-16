@@ -1,0 +1,265 @@
+---
+title: "Carvana Image Masking Challenge"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Carvana Image Masking Challenge}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+```{r setup}
+knitr::opts_chunk$set(warning = TRUE, message = TRUE)
+library(unet)
+library(keras)
+library(tfdatasets)
+library(tidyverse)
+library(rsample)
+library(reticulate)
+```
+
+In this example we will use the `unet` package to create an U-Net model that
+could be used to remove the background from images in the Carvana dataset.
+
+The dataset we are goind to use appeared first in the [Carvana Image Masking Challenge](https://www.kaggle.com/c/carvana-image-masking-challenge/overview)
+on Kaggle. You can see more information in the [competition page](https://www.kaggle.com/c/carvana-image-masking-challenge/overview).
+
+Before running the script, download [the data](https://www.kaggle.com/c/carvana-image-masking-challenge/data). You will only
+need `train.zip` and `train_mask.zip` files.
+
+The `train.zip` file contains images of the cars taken by Carvana and `train_mask.zip`
+contains the respective masks. 
+
+Here are some examples of what you can find in the dataset. On left we can find the
+original image and on the right we find the mask.
+
+```{r echo=FALSE}
+images <- tibble(
+  img = list.files(here::here("data-raw/train"), full.names = TRUE),
+  mask = list.files(here::here("data-raw/train_masks"), full.names = TRUE)
+  ) %>% 
+  sample_n(2) %>% 
+  map(. %>% magick::image_read() %>% magick::image_resize("128x128"))
+
+out <- magick::image_append(c(
+  magick::image_append(images$img, stack = TRUE), 
+  magick::image_append(images$mask, stack = TRUE)
+  )
+)
+
+plot(out)
+```
+
+Now let's start building building our model. We will use `tfdatasets` to make our
+data loading and pre-processing pipeline. 
+
+First we will define which images we are going to use for training and which images
+we will use for validation. I am assuming we extracted both folders into the `data-raw` directory.
+
+```{r}
+data <- tibble(
+  img = list.files(here::here("data-raw/train"), full.names = TRUE),
+  mask = list.files(here::here("data-raw/train_masks"), full.names = TRUE)
+)
+
+data <- initial_split(data, prop = 0.8)
+```
+
+Ok, now let's define a pipeline to read the files and decode them as images. In
+this case the images are `.jpeg` files and the masks are `.gif` files.
+
+```{r}
+training_dataset <- training(data) %>%  
+  tensor_slices_dataset() %>% 
+  dataset_map(~.x %>% list_modify(
+    img = tf$image$decode_jpeg(tf$io$read_file(.x$img)),
+    mask = tf$image$decode_gif(tf$io$read_file(.x$mask))[1,,,][,,1,drop=FALSE]
+  ))
+```
+
+The `[` calls wound't be necessary if `tf$image$decode_gif` returned a 3D Tensor like `tf$image$decode_jpeg` does. And if it could read just one color channel as we are only interested if it's black and white.
+
+If you are running this code interactively you can easilly see the output of this
+chunk with:
+
+```{r}
+example <- training_dataset %>% as_iterator() %>% iter_next()
+```
+
+The above loaded the images into into an `uint8` Tensor. Which is great for reading 
+as it uses less memory. However for modelling we prefer having `float32` Tensors 
+and that the values are in the [0,1] range. That's what will will fix now:
+
+```{r}
+training_dataset <- training_dataset %>% 
+  dataset_map(~.x %>% list_modify(
+    img = tf$image$convert_image_dtype(.x$img, dtype = tf$float32),
+    mask = tf$image$convert_image_dtype(.x$mask, dtype = tf$float32)
+  ))
+```
+
+The images from our dataset are in a pretty high definition (1280x1918) but we will resize them to reduce the computing cost of the model. We are going to resizem them to 128x128. This size is completely arbitrary.
+
+```{r}
+training_dataset <- training_dataset %>% 
+  dataset_map(~.x %>% list_modify(
+    img = tf$image$resize(.x$img, size = shape(128, 128)),
+    mask = tf$image$resize(.x$mask, size = shape(128, 128))
+  ))
+```
+
+We can plot the resulting images:
+
+```{r}
+example <- training_dataset %>% as_iterator() %>% iter_next()
+example$img %>% as.array() %>% as.raster() %>% plot()
+```
+
+It's usual when fitting U-Net to use some kind of data augmentation strategy.
+In this example we are going to apply some random brightness, saturation and
+contrast in each image. Let's encapsulate this into an R function:
+
+```{r}
+random_bsh <- function(img) {
+  img %>% 
+    tf$image$random_brightness(max_delta = 0.3) %>% 
+    tf$image$random_contrast(lower = 0.5, upper = 0.7) %>% 
+    tf$image$random_saturation(lower = 0.5, upper = 0.7) %>% 
+    tf$clip_by_value(0, 1) # clip the values into [0,1] range.
+}
+```
+
+We can now map this function into the images:
+
+```{r}
+training_dataset <- training_dataset %>% 
+  dataset_map(~.x %>% list_modify(
+    img = random_bsh(.x$img)
+  ))
+```
+
+Again, we can plot the resulting image:
+
+```{r}
+example <- training_dataset %>% as_iterator() %>% iter_next()
+example$img %>% as.array() %>% as.raster() %>% plot()
+```
+
+Of course, we could create a function with the above code and reuse it to create
+the valdiation dataset, and that what we are going to do.
+
+```{r}
+create_dataset <- function(data, train, batch_size = 32L) {
+  
+  dataset <- data %>% 
+    tensor_slices_dataset() %>% 
+    dataset_map(~.x %>% list_modify(
+      img = tf$image$decode_jpeg(tf$io$read_file(.x$img)),
+      mask = tf$image$decode_gif(tf$io$read_file(.x$mask))[1,,,][,,1,drop=FALSE]
+    )) %>% 
+    dataset_map(~.x %>% list_modify(
+      img = tf$image$convert_image_dtype(.x$img, dtype = tf$float32),
+      mask = tf$image$convert_image_dtype(.x$mask, dtype = tf$float32)
+    )) %>% 
+    dataset_map(~.x %>% list_modify(
+      img = tf$image$resize(.x$img, size = shape(128, 128)),
+      mask = tf$image$resize(.x$mask, size = shape(128, 128))
+    ))
+  
+  if (train) {
+    dataset <- dataset %>% 
+      dataset_map(~.x %>% list_modify(
+        img = random_bsh(.x$img)
+      )) 
+  }
+  
+  dataset <- dataset %>% 
+    dataset_batch(batch_size)
+  
+  if (train) {
+    dataset <- dataset %>% 
+      dataset_shuffle(buffer_size = 128)
+  }
+  
+  dataset %>% 
+    dataset_map(unname) # Keras needs an unnamed output.
+}
+```
+
+
+Note that we added 3 steps in the `create_dataset` function:
+
+1. `dataset_batch` to batch the dataset before.
+2. `dataset_suffle` to shuffle the dataset
+3. `dataset_map(unname)` since Keras needs an unnamed input.
+
+Now we can create our training and validation datasets:
+
+```{r}
+training_dataset <- create_dataset(training(data), train = TRUE)
+validation_dataset <- create_dataset(testing(data), train = FALSE)
+```
+
+Great! We have prepared our data pipeline. Now we need to build the model.
+
+Luckily, building the model is the easiest part if you use `unet`.
+
+```{r}
+model <- unet(input_shape = c(128, 128, 3))
+```
+
+That's all. The model is built. You can see the summary if you want with:
+
+```{r}
+summary(model)
+```
+
+Finally, let's compile and fit our model. The competition uses a different metric 
+called Dice that can be implemente like this:
+
+```{r}
+dice <- custom_metric("dice", function(y_true, y_pred, smooth = 1.0) {
+  y_true_f <- k_flatten(y_true)
+  y_pred_f <- k_flatten(y_pred)
+  intersection <- k_sum(y_true_f * y_pred_f)
+  (2 * intersection + smooth) / (k_sum(y_true_f) + k_sum(y_pred_f) + smooth)
+})
+```
+
+We can now compile our model:
+
+```{r}
+model %>% compile(
+  optimizer = "rmsprop",
+  loss = "binary_crossentropy",
+  metrics = list(dice, metric_binary_accuracy)
+)
+```
+
+We could use a different loss - tuned to make Dice higher, but let's just use the 
+binary crossentropy.
+
+```{r}
+model %>% fit(
+  training_dataset,
+  epochs = 5, 
+  validation_data = validation_dataset
+)
+```
+
+Fitting this model takes ~1500s per epoch on my MacBook Pro CPU. With a good GPU
+you can make it in around ~120s/epoch.
+
+That's it. Now you have trained a U-Net using `unet`.
+
+
+
+
+
