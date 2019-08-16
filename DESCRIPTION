@@ -1,0 +1,14 @@
+Package: unet
+Title: U-Net: Convolutional Networks for Biomedical Image Segmentation
+Version: 0.1
+Authors@R: c(
+  person(given = "Daniel", family = "Falbel", role = c("aut", "cre"), email = "daniel@rstudio.com"),
+  person(given = "Karol", family = "Żak", role = c("cre"), comment = "Original Python implementation")
+  )
+Description: Implementation of U-Net: Convolutional Networks for Biomedical Image 
+  Segmentation (Ronneberger et al., 2015 <doi:10.1007/978-3-319-24574-4_28>) using Keras. 
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Imports: 
+    keras
