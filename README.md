@@ -12,7 +12,7 @@ An Keras/R implementation of [U-Net](https://arxiv.org/abs/1505.04597).
 Install U-Net from GitHub with:
 
 ``` r
-remoters::install_github("dfalbel/unet")
+remotes::install_github("dfalbel/unet")
 ```
 
 ## Example
