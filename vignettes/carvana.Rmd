@@ -28,6 +28,12 @@ library(reticulate)
 In this example we will use the `unet` package to create an U-Net model that
 could be used to remove the background from images in the Carvana dataset.
 
+[U-Net](https://arxiv.org/abs/1505.04597) is a kind of convolutional neural network that was first developed for biomedical image segmentation but it showed good results in many other fields. 
+
+![U-Net architecture](https://user-images.githubusercontent.com/4706822/63275620-3c987800-c278-11e9-9d92-66d1264eb05c.png)
+
+
+
 The dataset we are goind to use appeared first in the [Carvana Image Masking Challenge](https://www.kaggle.com/c/carvana-image-masking-challenge/overview)
 on Kaggle. You can see more information in the [competition page](https://www.kaggle.com/c/carvana-image-masking-challenge/overview).
 
