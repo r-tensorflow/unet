@@ -25,7 +25,7 @@ library(rsample)
 library(reticulate)
 ```
 
-In this example we will use the `unet` package to create an U-Net model that
+In this example we will use the `unet` package to create a U-Net model that
 could be used to remove the background from images in the Carvana dataset.
 
 [U-Net](https://arxiv.org/abs/1505.04597) is a kind of convolutional neural network that was first developed for biomedical image segmentation but it showed good results in many other fields. 
@@ -34,8 +34,8 @@ could be used to remove the background from images in the Carvana dataset.
 
 
 
-The dataset we are goind to use appeared first in the [Carvana Image Masking Challenge](https://www.kaggle.com/c/carvana-image-masking-challenge/overview)
-on Kaggle. You can see more information in the [competition page](https://www.kaggle.com/c/carvana-image-masking-challenge/overview).
+The dataset we are going to use appeared first in the [Carvana Image Masking Challenge](https://www.kaggle.com/c/carvana-image-masking-challenge/overview)
+on Kaggle. You can see more information on the [competition page](https://www.kaggle.com/c/carvana-image-masking-challenge/overview).
 
 Before running the script, download [the data](https://www.kaggle.com/c/carvana-image-masking-challenge/data). You will only
 need `train.zip` and `train_mask.zip` files.
@@ -43,7 +43,7 @@ need `train.zip` and `train_mask.zip` files.
 The `train.zip` file contains images of the cars taken by Carvana and `train_mask.zip`
 contains the respective masks. 
 
-Here are some examples of what you can find in the dataset. On left we can find the
+Here are some examples of what you can find in the dataset. On the left we can find the
 original image and on the right we find the mask.
 
 ```{r echo=FALSE}
@@ -63,7 +63,7 @@ out <- magick::image_append(c(
 plot(out)
 ```
 
-Now let's start building building our model. We will use `tfdatasets` to make our
+Now let's start building building our model. We will use `tfdatasets` to build our
 data loading and pre-processing pipeline. 
 
 First we will define which images we are going to use for training and which images
@@ -90,18 +90,18 @@ training_dataset <- training(data) %>%
   ))
 ```
 
-The `[` calls wound't be necessary if `tf$image$decode_gif` returned a 3D Tensor like `tf$image$decode_jpeg` does. And if it could read just one color channel as we are only interested if it's black and white.
+The `[` calls wouldn't be necessary if `tf$image$decode_gif` returned a 3D Tensor like `tf$image$decode_jpeg` does. And if it could read just one color channel as we are only interested if it's black and white.
 
-If you are running this code interactively you can easilly see the output of this
+If you are running this code interactively you can easily see the output of this
 chunk with:
 
 ```{r}
 example <- training_dataset %>% as_iterator() %>% iter_next()
 ```
 
-The above loaded the images into into an `uint8` Tensor. Which is great for reading 
-as it uses less memory. However for modelling we prefer having `float32` Tensors 
-and that the values are in the [0,1] range. That's what will will fix now:
+The above loaded the images into into a `uint8` Tensor. Which is great for reading 
+as it uses less memory. However for modelling we prefer having `float32` Tensors, 
+and that the values are in the [0,1] range. That's what we will fix now:
 
 ```{r}
 training_dataset <- training_dataset %>% 
@@ -111,7 +111,7 @@ training_dataset <- training_dataset %>%
   ))
 ```
 
-The images from our dataset are in a pretty high definition (1280x1918) but we will resize them to reduce the computing cost of the model. We are going to resizem them to 128x128. This size is completely arbitrary.
+The images from our dataset are pretty high definition (1280x1918) but we will resize them to reduce the computing cost of the model. We are going to resize them to 128x128. This size is completely arbitrary.
 
 ```{r}
 training_dataset <- training_dataset %>% 
@@ -142,7 +142,7 @@ random_bsh <- function(img) {
 }
 ```
 
-We can now map this function into the images:
+We can now map this function over the images:
 
 ```{r}
 training_dataset <- training_dataset %>% 
@@ -159,7 +159,7 @@ example$img %>% as.array() %>% as.raster() %>% plot()
 ```
 
 Of course, we could create a function with the above code and reuse it to create
-the valdiation dataset, and that what we are going to do.
+the validation dataset, and that's what we are going to do.
 
 ```{r}
 create_dataset <- function(data, train, batch_size = 32L) {
@@ -203,8 +203,8 @@ create_dataset <- function(data, train, batch_size = 32L) {
 Note that we added 3 steps in the `create_dataset` function:
 
 1. `dataset_batch` to batch the dataset before.
-2. `dataset_suffle` to shuffle the dataset
-3. `dataset_map(unname)` since Keras needs an unnamed input.
+2. `dataset_shuffle` to shuffle the dataset
+3. `dataset_map(unname)` since Keras needs unnamed input.
 
 Now we can create our training and validation datasets:
 
@@ -228,7 +228,7 @@ summary(model)
 ```
 
 Finally, let's compile and fit our model. The competition uses a different metric 
-called Dice that can be implemente like this:
+called Dice that can be implemented like this:
 
 ```{r}
 dice <- custom_metric("dice", function(y_true, y_pred, smooth = 1.0) {
