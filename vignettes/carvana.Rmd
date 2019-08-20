@@ -85,12 +85,14 @@ this case the images are `.jpeg` files and the masks are `.gif` files.
 training_dataset <- training(data) %>%  
   tensor_slices_dataset() %>% 
   dataset_map(~.x %>% list_modify(
-    img = tf$image$decode_jpeg(tf$io$read_file(.x$img)),
-    mask = tf$image$decode_gif(tf$io$read_file(.x$mask))[1,,,][,,1,drop=FALSE]
+    img = tf$image$decode_image(tf$io$read_file(.x$img)),
+    mask = tf$image$decode_image(
+      tf$io$read_file(.x$mask), expand_animations = FALSE)
+    [,,1,drop=FALSE]
   ))
 ```
 
-The `[` calls wouldn't be necessary if `tf$image$decode_gif` returned a 3D Tensor like `tf$image$decode_jpeg` does. And if it could read just one color channel as we are only interested if it's black and white.
+For BMP, GIF, JPEG, and PNG format images, `tf$image$decode_image` detects the type automatically. In case of the mask, which has three channels but is black-and-white effectively, we may just pick one of the channels.
 
 If you are running this code interactively you can easily see the output of this
 chunk with:
