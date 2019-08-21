@@ -186,13 +186,15 @@ create_dataset <- function(data, train, batch_size = 32L) {
       )) 
   }
   
+  if (train) {
+    dataset <- dataset %>% 
+      dataset_shuffle(buffer_size = batch_size*128)
+  }
+  
   dataset <- dataset %>% 
     dataset_batch(batch_size)
   
-  if (train) {
-    dataset <- dataset %>% 
-      dataset_shuffle(buffer_size = 128)
-  }
+  
   
   dataset %>% 
     dataset_map(unname) # Keras needs an unnamed output.
@@ -243,7 +245,7 @@ We can now compile our model:
 
 ```{r}
 model %>% compile(
-  optimizer = "rmsprop",
+  optimizer = optimizer_rmsprop(lr = 1e-5),
   loss = "binary_crossentropy",
   metrics = list(dice, metric_binary_accuracy)
 )
@@ -264,6 +266,42 @@ Fitting this model takes ~1500s per epoch on my MacBook Pro CPU. With a good GPU
 you can make it in around ~120s/epoch.
 
 That's it. Now you have trained a U-Net using `unet`.
+
+We can now make predictions for the validation data and see what the results looks
+like. Let's take the first batch of images in the validation data.
+
+```{r}
+batch <- validation_dataset %>% as_iterator() %>% iter_next()
+predictions <- predict(model, batch)
+```
+
+In the image below you can see the original mask, the original picture and
+the predicted mask. 
+
+```{r, echo = FALSE}
+images <- tibble(
+  image = batch[[1]] %>% array_branch(1),
+  predicted_mask = predictions[,,,1] %>% array_branch(1),
+  mask = batch[[2]][,,,1]  %>% array_branch(1)
+) %>% 
+  sample_n(2) %>% 
+  map_depth(2, function(x) {
+    as.raster(x) %>% magick::image_read()
+  }) %>% 
+  map(~do.call(c, .x))
+
+
+out <- magick::image_append(c(
+  magick::image_append(images$mask, stack = TRUE),
+  magick::image_append(images$image, stack = TRUE), 
+  magick::image_append(images$predicted_mask, stack = TRUE)
+  )
+)
+
+plot(out)
+```
+
+
 
 
 
