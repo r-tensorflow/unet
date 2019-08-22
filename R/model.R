@@ -38,11 +38,11 @@ conv2d_block <- function(inputs, use_batch_norm = TRUE, dropout = 0.3,
 #' U-Net: Convolutional Networks for Biomedical Image Segmentation
 #'
 #' @param input_shape Dimensionality of the input (integer) not including the
-#'   samples axis. Must be lenght 3 numeric vector.
+#'   samples axis. Must be length 3 numeric vector.
 #' @param num_classes Number of classes.
-#' @param dropout Dropout rate applied.
+#' @param dropout Dropout rate applied between downsampling and upsampling phases.
 #' @param filters Number of filters of the first convolution.
-#' @param num_layers Number of layers in the encoder.
+#' @param num_layers Number of downsizing blocks in the encoder.
 #' @param  output_activation Activation in the output layer.
 #'
 #' @export
